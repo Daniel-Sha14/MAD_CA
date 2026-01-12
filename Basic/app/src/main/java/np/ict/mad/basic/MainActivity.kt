@@ -1,17 +1,28 @@
 package np.ict.mad.basic
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -30,6 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import np.ict.mad.basic.ui.theme.BasicTheme
@@ -48,10 +61,11 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WackAMoleApp() {
-    // Current score, time left for game (does not work now)
+fun GameScreen(navController: NavController) {
+    // Current score, time left for game and mole index (does not work now)
     var currentScore by remember { mutableStateOf(0) }
     var timeLeft by remember { mutableStateOf(30) }
+    var moleIndex by remember { mutableIntStateOf(4) }
 
     Scaffold(
         // TopAppBar contains the game name Wack-a-Mole and the settings icon to lead to another page
@@ -60,7 +74,7 @@ fun WackAMoleApp() {
                 title = { Text("Wack-a-Mole") },
                 actions = {
                     IconButton(onClick = {
-                        // Would navigate to Settings screen
+                        navController.navigate("settings") // leads to settings page
                     }) {
                         Icon(imageVector = Icons.Filled.Settings, contentDescription = "Settings")
                     }
@@ -97,7 +111,90 @@ fun WackAMoleApp() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // the 3x3 grid for the mole layout
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                userScrollEnabled = false // keep it fixed
+            ) {
+                items((0..8).toList()) { index ->
+                    HoleButton(
+                        isMole = (index == moleIndex),
+                        onClick = {
+                            // Only able to click only (haven add logic)
+                            if (index == moleIndex) {
+                                currentScore += 1
+
+                            }
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
         }
+    }
+}
+// The settings page (with a back arrow to the game page)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(navController: NavController) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Settings screen")
+        }
+    }
+}
+
+@Composable
+fun HoleButton(
+    isMole: Boolean,
+    onClick: () -> Unit
+) {
+
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .aspectRatio(1f) // makes it square within the grid cell
+            .fillMaxWidth()
+    ) {
+        if (isMole) {
+            Image(
+                painter = painterResource(id = R.drawable.mole), //image for mole
+                contentDescription = "Mole",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+        }
+    }
+}
+// for the navigation between the game page and the settings page (using nav controller)
+@Composable
+fun WackAMoleApp() {
+    val navController = rememberNavController()
+
+    NavHost(navController = navController, startDestination = "game") {
+        composable("game") { GameScreen(navController) }
+        composable("settings") { SettingsScreen(navController) }
     }
 }
 
