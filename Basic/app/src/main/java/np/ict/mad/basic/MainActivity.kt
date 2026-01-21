@@ -34,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,11 +44,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import np.ict.mad.basic.ui.theme.BasicTheme
 import kotlin.random.Random
+import kotlin.random.nextLong
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,13 +68,53 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GameScreen(navController: NavController) {
-    // Current score, time left for game and mole index (does not work now)
-    var currentScore by remember { mutableStateOf(0) }
-    var timeLeft by remember { mutableStateOf(30) }
-    var moleIndex by remember { mutableIntStateOf(4) } // stores which hole the mole is in
+
+    var currentScore by remember { mutableStateOf(0) } // current score of user as the game is running
+    var timeLeft by remember { mutableStateOf(30) } // time left of the game
+    var moleIndex by remember { mutableIntStateOf(4) } // index of the hole that shows the mole currently
 
     var isRunning by rememberSaveable { mutableStateOf(false) } // to check if the game is still running
     var isGameOver by rememberSaveable { mutableStateOf(false) } // to check if the game is over or not
+
+    // For Persistent Storage
+    val context = LocalContext.current
+    val prefs = remember {context.getSharedPreferences("wack-a-mole_prefs", android.content.Context.MODE_PRIVATE)} // saving the preference
+    var highScore by rememberSaveable { mutableIntStateOf(0) } // highscore of user
+
+    // Timer logic (countdown)
+    LaunchedEffect(isRunning){
+        if (!isRunning) {
+            return@LaunchedEffect // if its not running, return
+        }
+        while (isRunning && timeLeft > 0){ // if game running and timer is not 0
+            delay(1000)
+            timeLeft -= 1 // decrement it (countdown) until 0
+        }
+        if (timeLeft == 0){ // if timer reach 0
+            isRunning = false // game is not running anymore
+            isGameOver = true // game ends as no more timer
+            if (currentScore > highScore){
+                highScore = currentScore
+                prefs.edit().putInt("HIGH_SCORE", highScore).apply()
+            }
+        }
+    }
+
+    // for mole movement
+    LaunchedEffect(isRunning) {
+        if (!isRunning){
+            return@LaunchedEffect // return if game is not running
+        }
+        while (isRunning && timeLeft > 0){ // while game is running and time is remaining
+            delay(Random.nextLong(700, 1001)) // movement speed for mole
+            moleIndex = Random.nextInt(0,9) // select another number for the mole to be in next
+        }
+    }
+
+    // for highscore, reads highscore before game starts, displays 0 if none
+    LaunchedEffect(Unit) {
+        highScore = prefs.getInt("HIGH_SCORE", 0)
+    }
 
     Scaffold(
         // TopAppBar contains the game name Wack-a-Mole and the settings icon to lead to another page
@@ -106,6 +150,10 @@ fun GameScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            Text("High Score: $highScore", style = MaterialTheme.typography.bodyMedium) // display highscore at the top for users to see
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Start/Restart button
             Button(onClick = {
                 currentScore = 0
@@ -125,13 +173,13 @@ fun GameScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                userScrollEnabled = false // keep it fixed
+                userScrollEnabled = false
             ) {
                 items((0..8).toList()) { index ->
                     HoleButton(
                         isMole = (index == moleIndex),
                         onClick = {
-                            // Only able to click only
+                            // Once user clicks mole, increment score
                             if (isRunning && index == moleIndex) {
                                 currentScore += 1
 
@@ -142,6 +190,13 @@ fun GameScreen(navController: NavController) {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // if game ends, display the final score user got in this round
+            if (isGameOver){
+                Spacer(Modifier.height(12.dp))
+                Text("Game Over! Final Score: $currentScore")
+
+            }
 
         }
     }
