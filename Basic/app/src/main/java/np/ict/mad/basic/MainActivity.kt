@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import np.ict.mad.basic.ui.theme.BasicTheme
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,7 +67,10 @@ fun GameScreen(navController: NavController) {
     // Current score, time left for game and mole index (does not work now)
     var currentScore by remember { mutableStateOf(0) }
     var timeLeft by remember { mutableStateOf(30) }
-    var moleIndex by remember { mutableIntStateOf(4) }
+    var moleIndex by remember { mutableIntStateOf(4) } // stores which hole the mole is in
+
+    var isRunning by rememberSaveable { mutableStateOf(false) } // to check if the game is still running
+    var isGameOver by rememberSaveable { mutableStateOf(false) } // to check if the game is over or not
 
     Scaffold(
         // TopAppBar contains the game name Wack-a-Mole and the settings icon to lead to another page
@@ -105,8 +110,11 @@ fun GameScreen(navController: NavController) {
             Button(onClick = {
                 currentScore = 0
                 timeLeft = 30
+                moleIndex = Random.nextInt(0,9) // stores which hole the mole is in
+                isRunning = true
+                isGameOver = false
             }) {
-                Text("Start / Restart")
+                Text(if (isRunning) "Restart" else "Start")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -123,8 +131,8 @@ fun GameScreen(navController: NavController) {
                     HoleButton(
                         isMole = (index == moleIndex),
                         onClick = {
-                            // Only able to click only (haven add logic)
-                            if (index == moleIndex) {
+                            // Only able to click only
+                            if (isRunning && index == moleIndex) {
                                 currentScore += 1
 
                             }
