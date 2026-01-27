@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -30,7 +31,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -39,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,9 +51,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import np.ict.mad.advanced.data.AppDatabase
+import np.ict.mad.advanced.data.ScoreEntity
 import np.ict.mad.advanced.ui.theme.AdvancedTheme
 import kotlin.random.Random
 import kotlin.random.nextLong
@@ -67,7 +77,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameScreen(navController: NavController) {
+fun GameScreen(navController: NavController, currentUserId: Long, currentUsername: String) {
 
     var currentScore by remember { mutableStateOf(0) } // current score of user as the game is running
     var timeLeft by remember { mutableStateOf(30) } // time left of the game
@@ -76,10 +86,11 @@ fun GameScreen(navController: NavController) {
     var isRunning by rememberSaveable { mutableStateOf(false) } // to check if the game is still running
     var isGameOver by rememberSaveable { mutableStateOf(false) } // to check if the game is over or not
 
-    // For Persistent Storage
+    // For Room
     val context = LocalContext.current
-    val prefs = remember {context.getSharedPreferences("wack-a-mole_prefs", android.content.Context.MODE_PRIVATE)} // saving the preference
-    var highScore by rememberSaveable { mutableIntStateOf(0) } // highscore of user
+    val db = remember(context){ AppDatabase.getInstance(context) }
+    val scoreDao = remember(db){db.scoreDao()} // for user's best score (highscore)
+    val scope = rememberCoroutineScope()
 
     // Timer logic (countdown)
     LaunchedEffect(isRunning){
@@ -93,9 +104,15 @@ fun GameScreen(navController: NavController) {
         if (timeLeft == 0){ // if timer reach 0
             isRunning = false // game is not running anymore
             isGameOver = true // game ends as no more timer
-            if (currentScore > highScore){
-                highScore = currentScore
-                prefs.edit().putInt("HIGH_SCORE", highScore).apply()
+            // for Room database to see user best score
+            scope.launch {
+                scoreDao.insertScore(
+                    ScoreEntity(
+                        userId = currentUserId,
+                        score = currentScore,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
             }
         }
     }
@@ -109,11 +126,6 @@ fun GameScreen(navController: NavController) {
             delay(Random.nextLong(700, 1001)) // movement speed for mole
             moleIndex = Random.nextInt(0,9) // select another number for the mole to be in next
         }
-    }
-
-    // for highscore, reads highscore before game starts, displays 0 if none
-    LaunchedEffect(Unit) {
-        highScore = prefs.getInt("HIGH_SCORE", 0)
     }
 
     Scaffold(
@@ -149,8 +161,6 @@ fun GameScreen(navController: NavController) {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            Text("High Score: $highScore", style = MaterialTheme.typography.bodyMedium) // display highscore at the top for users to see
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -228,6 +238,118 @@ fun SettingsScreen(navController: NavController) {
     }
 }
 
+// The login screen where users would be brought to login to play the game
+@Composable
+fun LoginScreen(
+    navController: NavController,
+    onLoginSuccess: (Long, String) -> Unit
+) {
+    // For Room database access
+    val context = LocalContext.current
+    val db = remember(context){ AppDatabase.getInstance(context) } // retrieves the singleton db instance
+    val userDao = remember(db){db.userDao()} // gets UserDao from the database
+    val scope = rememberCoroutineScope()
+
+    // input fields
+    var username by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+
+    val snackbarHostState = remember { SnackbarHostState() } // to show login errors
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text("Sign In", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(16.dp))
+
+            // for username input
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // for password input (hidden)
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // sign in button
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    val u = username.trim()
+                    val p = password
+
+                    // validation
+                    if (u.isEmpty() || p.isEmpty()) {
+                        scope.launch { snackbarHostState.showSnackbar("Please enter username and password.") }
+                        return@Button
+                    }
+
+                    // query for room db for the user's details
+                    scope.launch {
+                        val user = userDao.findByUsername(u)
+                        when {
+                            user == null -> snackbarHostState.showSnackbar("User not found. Please sign up.")
+                            user.password != p -> snackbarHostState.showSnackbar("Wrong password.")
+                            else -> onLoginSuccess(user.userId, user.username)
+                        }
+                    }
+                }
+            ) {
+                Text("Sign In")
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // to go to sign up screen
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { navController.navigate("signup") }
+            ) {
+                Text("Go to Sign Up")
+            }
+        }
+    }
+}
+
+// The signup screen where users would be brought to to create a account
+@Composable
+fun SignupScreen(navController: NavController) {
+
+}
+
+// The screen where users can see their personal best score with other users
+@Composable
+fun ScoresScreen(
+    navController: NavController,
+    currentUserId: Long,
+    currentUsername: String
+) {
+
+}
+
 @Composable
 fun HoleButton(
     isMole: Boolean,
@@ -255,8 +377,60 @@ fun HoleButton(
 fun WackAMoleApp() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "game") {
-        composable("game") { GameScreen(navController) }
+    // to hold the currently logged-in user info, null means haven login
+    var currentUserId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var currentUsername by rememberSaveable { mutableStateOf<String?>(null) }
+
+    NavHost(navController = navController, startDestination = "login") {
+        // user starts at login instead of the gamescreen
+        composable("login") {
+            LoginScreen(
+                navController = navController,
+                onLoginSuccess = {userId, username ->
+                    currentUserId = userId
+                    currentUsername = username
+                    navController.navigate("game"){
+                        popUpTo("login"){inclusive = true}
+                    }
+                })
+        }
+        // signup screen
+        composable("signup") { SignupScreen(navController = navController) }
+        // the main gamescreen that has the wack a mole game
+        composable("game"){
+            val uid = currentUserId
+            val username = currentUsername
+
+            // cant access game if user haven login yet
+            if (uid == null || username == null){
+                LaunchedEffect(Unit) {
+                    navController.navigate("login"){
+                        popUpTo("game"){inclusive = true}
+                    }
+                }
+            }else{
+                GameScreen(
+                    navController = navController,
+                    currentUserId = uid,
+                    currentUsername = username
+                )
+            }
+        }
+        // for the scores screen which also requires logging in
+        composable("scores"){
+            val uid = currentUserId
+            val username = currentUsername
+            if (uid == null || username == null){
+                LaunchedEffect(Unit) {navController.navigate("login") }
+            }else{
+                ScoresScreen(
+                    navController = navController,
+                    currentUserId = uid,
+                    currentUsername = username
+                )
+            }
+        }
+        // settings screen
         composable("settings") { SettingsScreen(navController) }
     }
 }
