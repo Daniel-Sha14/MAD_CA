@@ -20,9 +20,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -58,7 +60,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import np.ict.mad.advanced.data.AppDatabase
+import np.ict.mad.advanced.data.LeaderboardRow
 import np.ict.mad.advanced.data.ScoreEntity
+import np.ict.mad.advanced.data.UserEntity
 import np.ict.mad.advanced.ui.theme.AdvancedTheme
 import kotlin.random.Random
 import kotlin.random.nextLong
@@ -208,6 +212,12 @@ fun GameScreen(navController: NavController, currentUserId: Long, currentUsernam
 
             }
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(onClick = { navController.navigate("scores") }) {
+                Text("View Scores")
+            }
+
         }
     }
 }
@@ -337,17 +347,154 @@ fun LoginScreen(
 // The signup screen where users would be brought to to create a account
 @Composable
 fun SignupScreen(navController: NavController) {
+    val context = LocalContext.current
+    val db = remember(context){ AppDatabase.getInstance(context) } // retrieves the singleton db instance
+    val userDao = remember(db){db.userDao()} // gets UserDao from the database
+    val scope = rememberCoroutineScope()
 
+    // the input fields
+    var username by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+
+    val snackbarHostState = remember{SnackbarHostState()} // to show login errors
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text("Sign Up", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(16.dp))
+
+            // to enter username
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // to enter password
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    val u = username.trim()
+                    val p = password
+
+                    // validation
+                    if (u.isEmpty() || p.isEmpty()) {
+                        scope.launch { snackbarHostState.showSnackbar("Please enter username and password.") }
+                        return@Button
+                    }
+
+                    scope.launch {
+                        try {
+                            userDao.insertUser(UserEntity(username = u, password = p))
+                            snackbarHostState.showSnackbar("Account created! Please sign in.")
+                            navController.navigate("login") {
+                                popUpTo("login") { inclusive = true }
+                            } // back to login
+                        } catch (e: Exception) {
+
+                            snackbarHostState.showSnackbar("Username already exists. Try another.")
+                        }
+                    }
+                }
+            ) {
+                Text("Create Account")
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { navController.navigate("login") {
+                    popUpTo("login") { inclusive = true }
+                } }
+            ) {
+                Text("Back to Login")
+            }
+        }
+    }
 }
 
 // The screen where users can see their personal best score with other users
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScoresScreen(
     navController: NavController,
     currentUserId: Long,
     currentUsername: String
 ) {
+    val context = LocalContext.current
+    val db = remember(context){ AppDatabase.getInstance(context) } // retrieves the singleton db instance
+    val scoreDao = remember(db){db.scoreDao()} // gets ScoreDao from the database
 
+    // personal best score for user and the leaderboard to see for other users
+    var personalBest by rememberSaveable { mutableIntStateOf(0) }
+    var leaderboard by remember{mutableStateOf<List<LeaderboardRow>>(emptyList())}
+
+    LaunchedEffect(currentUserId) {
+        personalBest = scoreDao.getPersonalBest(currentUserId) ?: 0
+        leaderboard = scoreDao.getLeaderboard()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Scores") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
+            Text("User: $currentUsername", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Text("Your personal best: $personalBest", style = MaterialTheme.typography.titleLarge)
+
+            Spacer(Modifier.height(16.dp))
+            Text("Leaderboard (best per user)", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+
+            LazyColumn {
+                items(leaderboard) { row ->
+                    val best = row.bestScore ?: 0
+                    Text("${row.username}: $best")
+                    Spacer(Modifier.height(6.dp))
+                }
+            }
+        }
+    }
 }
 
 @Composable
