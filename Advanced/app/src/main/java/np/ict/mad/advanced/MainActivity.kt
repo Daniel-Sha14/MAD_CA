@@ -20,11 +20,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -108,7 +109,7 @@ fun GameScreen(navController: NavController, currentUserId: Long, currentUsernam
         if (timeLeft == 0){ // if timer reach 0
             isRunning = false // game is not running anymore
             isGameOver = true // game ends as no more timer
-            // for Room database to see user best score
+            // for Room database to insert score into room for this user
             scope.launch {
                 scoreDao.insertScore(
                     ScoreEntity(
@@ -214,6 +215,7 @@ fun GameScreen(navController: NavController, currentUserId: Long, currentUsernam
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // to allow users to view their score and go to leaderboard
             Button(onClick = { navController.navigate("scores") }) {
                 Text("View Scores")
             }
@@ -317,7 +319,7 @@ fun LoginScreen(
                         return@Button
                     }
 
-                    // query for room db for the user's details
+                    // authenticate using Room
                     scope.launch {
                         val user = userDao.findByUsername(u)
                         when {
@@ -447,6 +449,7 @@ fun ScoresScreen(
     currentUserId: Long,
     currentUsername: String
 ) {
+    // for Room
     val context = LocalContext.current
     val db = remember(context){ AppDatabase.getInstance(context) } // retrieves the singleton db instance
     val scoreDao = remember(db){db.scoreDao()} // gets ScoreDao from the database
@@ -478,19 +481,71 @@ fun ScoresScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            Text("User: $currentUsername", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            Text("Your personal best: $personalBest", style = MaterialTheme.typography.titleLarge)
+            // a header card to show user and their personal best score
+            androidx.compose.material3.Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "User: $currentUsername",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Personal Best: $personalBest",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
-            Text("Leaderboard (best per user)", style = MaterialTheme.typography.titleMedium)
+
+            Text(
+                "Leaderboard (best per user)",
+                style = MaterialTheme.typography.titleMedium
+            )
             Spacer(Modifier.height(8.dp))
 
+            // the leaderboard list to view other users' scores
             LazyColumn {
-                items(leaderboard) { row ->
+                itemsIndexed(leaderboard) { index, row ->
                     val best = row.bestScore ?: 0
-                    Text("${row.username}: $best")
-                    Spacer(Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // the rank for the users
+                        Text(
+                            text = "#${index + 1}",
+                            modifier = Modifier.width(44.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Text(
+                            text = row.username,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        Text(
+                            text = best.toString(),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // divider between rows
+                    androidx.compose.material3.HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
                 }
             }
         }
